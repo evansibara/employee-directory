@@ -1,0 +1,216 @@
+@model EmployeeListViewModel
+@{
+    ViewData["Title"] = "Employee Directory";
+}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>@ViewData["Title"]</title>
+
+    <!-- Tailwind CDN (utility classes only — no build step needed for this assessment) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+
+    <style>
+        html { font-family: 'Inter', system-ui, sans-serif; }
+        .font-mono-num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+
+        @@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+        @@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        @@keyframes spin { to { transform: rotate(360deg); } }
+        .row-enter { animation: fadeIn .25s ease-out; }
+        .row-leave { animation: fadeOut .15s ease-in forwards; }
+        .spinner { animation: spin .6s linear infinite; }
+
+        @@media (prefers-reduced-motion: reduce) {
+            .row-enter, .row-leave, .spinner { animation: none; }
+        }
+
+        /* Custom scrollbar for the table on smaller viewports */
+        .table-scroll::-webkit-scrollbar { height: 6px; }
+        .table-scroll::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 9999px; }
+    </style>
+</head>
+<body class="min-h-screen bg-[#FAFAF9] text-[#18181B] antialiased">
+
+    <div id="app"
+         data-api-url="/api/employees"
+         data-delete-url-base="/api/employees"
+         data-initial-page="@Model.CurrentPage"
+         data-initial-page-size="@Model.PageSize"
+         data-initial-search-term="@Model.SearchTerm"
+         data-initial-total-records="@Model.TotalRecords">
+
+        <!-- ============ HEADER ============ -->
+        <header class="sticky top-0 z-20 border-b border-zinc-200 bg-[#FAFAF9]/90 backdrop-blur-sm">
+            <div class="max-w-5xl mx-auto px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div class="flex items-center gap-3">
+                    <div class="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">
+                        ED
+                    </div>
+                    <div>
+                        <h1 class="text-base font-semibold tracking-tight leading-none">Employee Directory</h1>
+                        <p id="recordSummary" class="text-xs text-zinc-500 mt-1">
+                            @Model.TotalRecords employee@(Model.TotalRecords == 1 ? "" : "s")
+                        </p>
+                    </div>
+                </div>
+
+                <div class="relative w-full sm:w-72">
+                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="7" />
+                        <path stroke-linecap="round" d="m20 20-3.5-3.5" />
+                    </svg>
+                    <input
+                        id="searchInput"
+                        type="search"
+                        autocomplete="off"
+                        placeholder="Search by first or last name…"
+                        value="@Model.SearchTerm"
+                        aria-label="Search employees by name"
+                        class="w-full pl-9 pr-8 py-2 text-sm rounded-lg border border-zinc-300 bg-white placeholder:text-zinc-400
+                               focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition" />
+                    <button
+                        id="clearSearchBtn"
+                        type="button"
+                        aria-label="Clear search"
+                        class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <path stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- ============ MAIN ============ -->
+        <main class="max-w-5xl mx-auto px-6 py-8">
+
+            <div class="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
+                <div id="tableWrapper" class="table-scroll overflow-x-auto transition-opacity duration-150">
+                    <table class="w-full text-sm border-collapse min-w-[720px]">
+                        <thead>
+                            <tr class="bg-zinc-50 border-b border-zinc-200 text-zinc-500 text-[11px] uppercase tracking-wider">
+                                <th class="text-left font-medium px-5 py-3">Name</th>
+                                <th class="text-left font-medium px-5 py-3">Department</th>
+                                <th class="text-left font-medium px-5 py-3">Job title</th>
+                                <th class="text-left font-medium px-5 py-3">Email</th>
+                                <th class="text-left font-medium px-5 py-3">Hire date</th>
+                                <th class="text-right font-medium px-5 py-3">Salary</th>
+                                <th class="px-5 py-3 w-12"><span class="sr-only">Actions</span></th>
+                            </tr>
+                        </thead>
+                        <tbody id="employeeTableBody" class="divide-y divide-zinc-100">
+                            @foreach (var emp in Model.Employees)
+                            {
+                                <tr data-id="@emp.Id" class="hover:bg-zinc-50/70 transition-colors">
+                                    <td class="px-5 py-3">
+                                        <div class="flex items-center gap-3">
+                                            <div class="employee-avatar h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0"
+                                                 data-name="@emp.FirstName @emp.LastName">
+                                                @($"{emp.FirstName[0]}{emp.LastName[0]}".ToUpper())
+                                            </div>
+                                            <span class="font-medium text-zinc-800">@emp.FirstName @emp.LastName</span>
+                                        </div>
+                                    </td>
+                                    <td class="px-5 py-3">
+                                        <span class="dept-badge inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" data-dept="@emp.Department">
+                                            @emp.Department
+                                        </span>
+                                    </td>
+                                    <td class="px-5 py-3 text-zinc-600">@emp.JobTitle</td>
+                                    <td class="px-5 py-3 text-zinc-500 truncate max-w-[180px]">@emp.Email</td>
+                                    <td class="px-5 py-3 text-zinc-500 font-mono-num text-xs">@emp.HireDate.ToString("MMM d, yyyy")</td>
+                                    <td class="px-5 py-3 text-right font-mono-num text-zinc-700">@emp.Salary.ToString("C0")</td>
+                                    <td class="px-5 py-3 text-right">
+                                        <button
+                                            type="button"
+                                            class="delete-btn inline-flex items-center justify-center h-8 w-8 rounded-lg text-zinc-400
+                                                   hover:text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition"
+                                            data-id="@emp.Id"
+                                            data-name="@emp.FirstName @emp.LastName"
+                                            aria-label="Delete @emp.FirstName @emp.LastName">
+                                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7h14Z" />
+                                            </svg>
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Empty state (no results for current search) -->
+                <div id="emptyState" class="hidden flex flex-col items-center justify-center py-16 px-6 text-center">
+                    <div class="h-11 w-11 rounded-full bg-zinc-100 flex items-center justify-center mb-3">
+                        <svg class="h-5 w-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="m20 20-3.5-3.5" />
+                        </svg>
+                    </div>
+                    <p class="text-sm font-medium text-zinc-700">No employees found</p>
+                    <p id="emptyStateHint" class="text-sm text-zinc-500 mt-1">Try a different search term.</p>
+                </div>
+            </div>
+
+            <!-- ============ PAGINATION ============ -->
+            <div id="paginationBar" class="flex items-center justify-between mt-5">
+                <p id="pageInfo" class="text-sm text-zinc-500"></p>
+                <div class="flex items-center gap-2">
+                    <button id="prevPageBtn" type="button"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-zinc-300 bg-white text-zinc-700
+                               hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white
+                               focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition">
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" /></svg>
+                        Previous
+                    </button>
+                    <span id="pageIndicator" class="text-sm text-zinc-600 font-medium px-2 tabular-nums"></span>
+                    <button id="nextPageBtn" type="button"
+                        class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-zinc-300 bg-white text-zinc-700
+                               hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white
+                               focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition">
+                        Next
+                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" /></svg>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- ============ DELETE CONFIRMATION MODAL ============ -->
+        <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+            <div id="confirmModalBackdrop" class="absolute inset-0 bg-zinc-900/40"></div>
+            <div class="relative bg-white rounded-xl shadow-lg max-w-sm w-full p-6">
+                <h2 id="confirmModalTitle" class="text-base font-semibold text-zinc-900">Delete employee?</h2>
+                <p id="confirmModalBody" class="text-sm text-zinc-500 mt-2">
+                    This will remove <span id="confirmModalName" class="font-medium text-zinc-700"></span> from the directory. This action cannot be undone.
+                </p>
+                <div class="flex justify-end gap-2 mt-6">
+                    <button id="cancelDeleteBtn" type="button"
+                        class="px-3.5 py-2 text-sm font-medium rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-50
+                               focus:outline-none focus:ring-2 focus:ring-zinc-300 transition">
+                        Cancel
+                    </button>
+                    <button id="confirmDeleteBtn" type="button"
+                        class="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700
+                               focus:outline-none focus:ring-2 focus:ring-red-500/40 disabled:opacity-60 disabled:cursor-not-allowed transition">
+                        <svg id="confirmDeleteSpinner" class="hidden spinner h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                            <circle cx="12" cy="12" r="9" stroke-opacity="0.25" />
+                            <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round" />
+                        </svg>
+                        <span id="confirmDeleteLabel">Delete</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- ============ TOASTS ============ -->
+        <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm"></div>
+    </div>
+
+    <script src="~/js/employees.js"></script>
+</body>
+</html>
