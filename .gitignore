@@ -1,5 +1,35 @@
+# ---- .NET build artifacts ----
 bin/
 obj/
+**/bin/
+**/obj/
 *.user
 .vs/
+
+# ---- NuGet ----
+*.nupkg
+*.snupkg
+.nuget/
+packages/
+
+# ---- Test results ----
+TestResults/
+*.trx
+
+# ---- macOS ----
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+
+# ---- IDE (Rider / VS Code local settings) ----
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# ---- Secrets ----
 .env
+*.env.local
+
+# ---- Logs ----
+*.log
