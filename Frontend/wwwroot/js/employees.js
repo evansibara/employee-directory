@@ -31,23 +31,23 @@
         isLoading: false
     };
 
-    // Deterministic color palettes so the same department/person always
-    // gets the same color, without a server round-trip for styling.
-    var DEPT_PALETTE = [
-        { bg: "bg-blue-50", text: "text-blue-700" },
-        { bg: "bg-emerald-50", text: "text-emerald-700" },
-        { bg: "bg-amber-50", text: "text-amber-700" },
-        { bg: "bg-violet-50", text: "text-violet-700" },
-        { bg: "bg-rose-50", text: "text-rose-700" },
-        { bg: "bg-cyan-50", text: "text-cyan-700" },
-        { bg: "bg-orange-50", text: "text-orange-700" },
-        { bg: "bg-teal-50", text: "text-teal-700" },
-        { bg: "bg-fuchsia-50", text: "text-fuchsia-700" },
-        { bg: "bg-lime-50", text: "text-lime-700" }
+    // Deterministic color palettes — same dept/person always gets same color.
+    // ponytail: inline CSS vars instead of Tailwind class combos
+    var DEPT_COLORS = [
+        { bg: "rgba(99,102,241,.15)",  color: "#a5b4fc" },
+        { bg: "rgba(16,185,129,.13)",  color: "#6ee7b7" },
+        { bg: "rgba(245,158,11,.13)",  color: "#fcd34d" },
+        { bg: "rgba(139,92,246,.14)",  color: "#c4b5fd" },
+        { bg: "rgba(239,68,68,.13)",   color: "#fca5a5" },
+        { bg: "rgba(6,182,212,.13)",   color: "#67e8f9" },
+        { bg: "rgba(249,115,22,.13)",  color: "#fdba74" },
+        { bg: "rgba(20,184,166,.13)",  color: "#5eead4" },
+        { bg: "rgba(236,72,153,.13)",  color: "#f9a8d4" },
+        { bg: "rgba(132,204,22,.13)",  color: "#bef264" }
     ];
     var AVATAR_PALETTE = [
-        "#2563EB", "#0D9488", "#D97706", "#7C3AED",
-        "#DC2626", "#0891B2", "#EA580C", "#059669"
+        "#5c54d4", "#0d7a6a", "#b45309", "#6d28d9",
+        "#b91c1c", "#0369a1", "#c2410c", "#047857"
     ];
 
     // ---------------------------------------------------------------
@@ -135,53 +135,44 @@
     // ---------------------------------------------------------------
 
     function renderDeptBadges() {
-        var badges = tableBody.querySelectorAll(".dept-badge");
-        badges.forEach(function (el) {
-            var dept = el.dataset.dept || "";
-            var palette = DEPT_PALETTE[hashString(dept) % DEPT_PALETTE.length];
-            el.classList.add(palette.bg, palette.text);
+        tableBody.querySelectorAll(".dept-badge").forEach(function (el) {
+            var c = DEPT_COLORS[hashString(el.dataset.dept || "") % DEPT_COLORS.length];
+            el.style.background = c.bg;
+            el.style.color = c.color;
         });
     }
 
     function renderAvatars() {
-        var avatars = tableBody.querySelectorAll(".employee-avatar");
-        avatars.forEach(function (el) {
-            var name = el.dataset.name || "";
-            var color = AVATAR_PALETTE[hashString(name) % AVATAR_PALETTE.length];
-            el.style.backgroundColor = color;
+        tableBody.querySelectorAll(".employee-avatar").forEach(function (el) {
+            el.style.background = AVATAR_PALETTE[hashString(el.dataset.name || "") % AVATAR_PALETTE.length];
         });
     }
 
     function buildRow(employee) {
         var tr = document.createElement("tr");
         tr.dataset.id = employee.id;
-        tr.className = "row-enter hover:bg-zinc-50/70 transition-colors";
+        tr.className = "row-enter";
 
         var fullName = employee.firstName + " " + employee.lastName;
 
         tr.innerHTML =
-            '<td class="px-5 py-3">' +
-                '<div class="flex items-center gap-3">' +
-                    '<div class="employee-avatar h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0" data-name="' + escapeHtml(fullName) + '">' +
+            '<td class="name-cell">' +
+                '<div class="name-wrap">' +
+                    '<div class="av employee-avatar" data-name="' + escapeHtml(fullName) + '">' +
                         initials(employee.firstName, employee.lastName) +
                     '</div>' +
-                    '<span class="font-medium text-zinc-800">' + escapeHtml(fullName) + '</span>' +
+                    escapeHtml(fullName) +
                 '</div>' +
             '</td>' +
-            '<td class="px-5 py-3">' +
-                '<span class="dept-badge inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" data-dept="' + escapeHtml(employee.department) + '">' +
-                    escapeHtml(employee.department) +
-                '</span>' +
-            '</td>' +
-            '<td class="px-5 py-3 text-zinc-600">' + escapeHtml(employee.jobTitle) + '</td>' +
-            '<td class="px-5 py-3 text-zinc-500 truncate max-w-[180px]">' + escapeHtml(employee.email || "") + '</td>' +
-            '<td class="px-5 py-3 text-zinc-500 font-mono-num text-xs">' + formatDate(employee.hireDate) + '</td>' +
-            '<td class="px-5 py-3 text-right font-mono-num text-zinc-700">' + formatCurrency(employee.salary) + '</td>' +
-            '<td class="px-5 py-3 text-right">' +
-                '<button type="button" class="delete-btn inline-flex items-center justify-center h-8 w-8 rounded-lg text-zinc-400 hover:text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition" ' +
-                    'data-id="' + employee.id + '" data-name="' + escapeHtml(fullName) + '" aria-label="Delete ' + escapeHtml(fullName) + '">' +
-                    '<svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
-                        '<path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7h14Z" />' +
+            '<td><span class="dept-badge" data-dept="' + escapeHtml(employee.department) + '">' + escapeHtml(employee.department) + '</span></td>' +
+            '<td>' + escapeHtml(employee.jobTitle) + '</td>' +
+            '<td class="mono" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(employee.email || "") + '</td>' +
+            '<td class="mono">' + formatDate(employee.hireDate) + '</td>' +
+            '<td class="mono r">' + formatCurrency(employee.salary) + '</td>' +
+            '<td class="r">' +
+                '<button type="button" class="del-btn delete-btn" data-id="' + employee.id + '" data-name="' + escapeHtml(fullName) + '" aria-label="Delete ' + escapeHtml(fullName) + '">' +
+                    '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
+                        '<path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7h14Z"/>' +
                     '</svg>' +
                 '</button>' +
             '</td>';
@@ -240,8 +231,8 @@
 
     function setLoading(isLoading) {
         state.isLoading = isLoading;
-        tableWrapper.classList.toggle("opacity-40", isLoading);
-        tableWrapper.classList.toggle("pointer-events-none", isLoading);
+        tableWrapper.style.opacity = isLoading ? "0.4" : "";
+        tableWrapper.style.pointerEvents = isLoading ? "none" : "";
         prevPageBtn.disabled = isLoading || prevPageBtn.disabled;
         nextPageBtn.disabled = isLoading || nextPageBtn.disabled;
     }
@@ -253,24 +244,18 @@
     function showToast(message, type) {
         var isError = type === "error";
         var toast = document.createElement("div");
-        toast.className =
-            "row-enter flex items-start gap-2.5 px-4 py-3 rounded-lg shadow-md text-sm border " +
-            (isError
-                ? "bg-red-50 border-red-200 text-red-800"
-                : "bg-emerald-50 border-emerald-200 text-emerald-800");
+        toast.className = "toast row-enter " + (isError ? "err" : "ok");
 
         var iconSvg = isError
-            ? '<svg class="h-4 w-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 8v5m0 3h.01"/></svg>'
-            : '<svg class="h-4 w-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="m8 12 3 3 5-6"/></svg>';
+            ? '<svg class="t-icon c-err" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 8v5m0 3h.01"/></svg>'
+            : '<svg class="t-icon c-ok" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="m8 12 3 3 5-6"/></svg>';
 
-        toast.innerHTML = iconSvg + '<span class="flex-1">' + escapeHtml(message) + '</span>';
+        toast.innerHTML = iconSvg + '<span>' + escapeHtml(message) + '</span>';
         toastContainer.appendChild(toast);
 
         setTimeout(function () {
             toast.classList.add("row-leave");
-            setTimeout(function () {
-                toast.remove();
-            }, 200);
+            setTimeout(function () { toast.remove(); }, 160);
         }, 4000);
     }
 

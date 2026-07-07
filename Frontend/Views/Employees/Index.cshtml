@@ -7,135 +7,309 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Internal employee directory — search, browse, and manage your team." />
     <title>@ViewData["Title"]</title>
-
-    <!-- Tailwind CDN (utility classes only — no build step needed for this assessment) -->
-    <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet" />
 
     <style>
-        html { font-family: 'Inter', system-ui, sans-serif; }
-        .font-mono-num { font-family: 'JetBrains Mono', ui-monospace, monospace; }
+        /* ── Reset & tokens ─────────────────────────────────────────────── */
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-        @@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-        @@keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
-        @@keyframes spin { to { transform: rotate(360deg); } }
-        .row-enter { animation: fadeIn .25s ease-out; }
-        .row-leave { animation: fadeOut .15s ease-in forwards; }
-        .spinner { animation: spin .6s linear infinite; }
-
-        @@media (prefers-reduced-motion: reduce) {
-            .row-enter, .row-leave, .spinner { animation: none; }
+        :root {
+            --bg:        #0f0f11;
+            --bg2:       #161619;
+            --bg3:       #1c1c21;
+            --border:    rgba(255,255,255,.07);
+            --border2:   rgba(255,255,255,.11);
+            --txt:       #e8e8ec;
+            --txt2:      #9898a6;
+            --txt3:      #55556a;
+            --accent:    #7c6aff;
+            --red:       #f04747;
+            --red-bg:    rgba(240,71,71,.1);
+            --green:     #3ecf8e;
+            --sidebar-w: 216px;
+            --radius:    10px;
+            --font:      'Geist', system-ui, sans-serif;
+            --mono:      'Geist Mono', ui-monospace, monospace;
         }
 
-        /* Custom scrollbar for the table on smaller viewports */
-        .table-scroll::-webkit-scrollbar { height: 6px; }
-        .table-scroll::-webkit-scrollbar-thumb { background: #d4d4d8; border-radius: 9999px; }
+        html, body { font-family: var(--font); background: var(--bg); color: var(--txt); -webkit-font-smoothing: antialiased; }
+        .hidden { display: none !important; }
+
+        /* ── Shell (sidebar + content) ───────────────────────────────── */
+        .shell   { display: flex; min-height: 100vh; }
+        .sidebar { width: var(--sidebar-w); background: var(--bg2); border-right: 1px solid var(--border); display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 10; }
+        .content { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; }
+
+        /* ── Sidebar ─────────────────────────────────────────────────── */
+        .brand { display: flex; align-items: center; gap: 10px; padding: 20px 16px 20px; border-bottom: 1px solid var(--border); }
+        .brand-mark { width: 30px; height: 30px; background: var(--accent); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #fff; letter-spacing: -.3px; flex-shrink: 0; }
+        .brand-name { font-size: 13px; font-weight: 600; color: var(--txt); }
+        .brand-sub  { font-size: 10.5px; color: var(--txt3); margin-top: 2px; }
+
+        .nav { padding: 12px 10px 0; flex: 1; }
+        .nav-label { font-size: 10px; font-weight: 600; color: var(--txt3); text-transform: uppercase; letter-spacing: .08em; padding: 14px 8px 6px; }
+        .nav-item { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 6px; font-size: 13px; font-weight: 500; color: var(--txt2); text-decoration: none; transition: background .12s, color .12s; }
+        .nav-item:hover  { background: rgba(255,255,255,.05); color: var(--txt); }
+        .nav-item.active { background: rgba(124,106,255,.15); color: var(--accent); }
+        .nav-item svg    { width: 15px; height: 15px; flex-shrink: 0; }
+
+        .sidebar-foot { padding: 14px 16px; border-top: 1px solid var(--border); }
+        .sidebar-foot p { font-size: 11px; color: var(--txt3); line-height: 1.65; }
+
+        /* ── Topbar ──────────────────────────────────────────────────── */
+        .topbar { height: 52px; background: var(--bg); border-bottom: 1px solid var(--border); padding: 0 28px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 9; }
+        .topbar-left  { display: flex; align-items: center; gap: 10px; }
+        .topbar-title { font-size: 13.5px; font-weight: 600; color: var(--txt); }
+        .topbar-right { display: flex; align-items: center; gap: 10px; }
+
+        /* Live count chip */
+        .chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px 3px 8px; border-radius: 20px; background: var(--bg3); border: 1px solid var(--border2); font-size: 12px; color: var(--txt2); }
+        .chip-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); box-shadow: 0 0 5px rgba(62,207,142,.7); }
+
+        /* ── Search ──────────────────────────────────────────────────── */
+        .search-wrap { position: relative; }
+        .search-wrap .s-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); width: 14px; height: 14px; color: var(--txt3); pointer-events: none; }
+        .search-input {
+            width: 260px; height: 32px; background: var(--bg3); border: 1px solid var(--border2); border-radius: 7px;
+            padding: 0 30px 0 32px; font: 13px var(--font); color: var(--txt); outline: none;
+            transition: border-color .18s, box-shadow .18s;
+        }
+        .search-input::placeholder { color: var(--txt3); }
+        .search-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(124,106,255,.18); }
+        .search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); background: none; border: none; color: var(--txt3); cursor: pointer; display: flex; padding: 2px; }
+        .search-clear:hover { color: var(--txt); }
+        .search-clear.hidden { display: none; }
+
+        /* ── Main ────────────────────────────────────────────────────── */
+        .main { padding: 24px 28px; flex: 1; }
+
+        /* ── Card ────────────────────────────────────────────────────── */
+        .card { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
+
+        /* ── Table ───────────────────────────────────────────────────── */
+        .tbl-wrap { overflow-x: auto; transition: opacity .15s; }
+        .tbl-wrap::-webkit-scrollbar { height: 4px; }
+        .tbl-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 99px; }
+
+        table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 680px; }
+
+        thead tr { border-bottom: 1px solid var(--border); }
+        thead th { padding: 10px 16px; text-align: left; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: .07em; color: var(--txt3); white-space: nowrap; }
+        thead th.r { text-align: right; }
+
+        tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+        tbody tr:last-child { border-bottom: none; }
+        tbody tr:hover { background: rgba(255,255,255,.024); }
+
+        tbody td { padding: 11px 16px; color: var(--txt2); vertical-align: middle; }
+        td.name-cell { color: var(--txt); font-weight: 500; }
+        td.r { text-align: right; }
+        td.mono { font-family: var(--mono); font-size: 12px; }
+
+        /* ── Avatar ──────────────────────────────────────────────────── */
+        .av { width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0; }
+        .name-wrap { display: flex; align-items: center; gap: 10px; }
+
+        /* ── Dept badge ──────────────────────────────────────────────── */
+        .dept-badge { display: inline-flex; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+
+        /* ── Del button ──────────────────────────────────────────────── */
+        .del-btn { width: 26px; height: 26px; border-radius: 5px; border: none; background: transparent; color: var(--txt3); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: background .12s, color .12s; }
+        .del-btn:hover { background: var(--red-bg); color: var(--red); }
+        .del-btn svg { width: 13px; height: 13px; }
+
+        /* ── Empty ───────────────────────────────────────────────────── */
+        .empty { padding: 60px 24px; text-align: center; }
+        .empty-icon { width: 38px; height: 38px; border-radius: 8px; background: var(--bg3); border: 1px solid var(--border2); display: flex; align-items: center; justify-content: center; margin: 0 auto 12px; color: var(--txt3); }
+        .empty p { font-size: 14px; font-weight: 500; color: var(--txt); }
+        .empty span { font-size: 13px; color: var(--txt3); display: block; margin-top: 4px; }
+
+        /* ── Pagination ──────────────────────────────────────────────── */
+        .pg-bar { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-top: 1px solid var(--border); }
+        .pg-info { font-size: 12px; color: var(--txt3); }
+        .pg-ctrls { display: flex; align-items: center; gap: 6px; }
+        .pg-btn {
+            height: 29px; padding: 0 11px; border-radius: 6px; border: 1px solid var(--border2);
+            background: var(--bg3); color: var(--txt2); font: 12px var(--font); font-weight: 500;
+            cursor: pointer; display: flex; align-items: center; gap: 4px; transition: border-color .13s, color .13s;
+        }
+        .pg-btn:hover:not(:disabled) { border-color: rgba(124,106,255,.5); color: var(--txt); }
+        .pg-btn:disabled { opacity: .3; cursor: not-allowed; }
+        .pg-btn svg { width: 12px; height: 12px; }
+        .pg-num { font-size: 12px; color: var(--txt3); padding: 0 6px; font-variant-numeric: tabular-nums; }
+
+        /* ── Modal ───────────────────────────────────────────────────── */
+        .modal-wrap { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .modal-wrap.hidden { display: none; }
+        .modal-bg  { position: absolute; inset: 0; background: rgba(0,0,0,.65); backdrop-filter: blur(5px); }
+        .modal-box { position: relative; background: var(--bg2); border: 1px solid var(--border2); border-radius: 13px; width: 100%; max-width: 370px; padding: 22px; box-shadow: 0 8px 40px rgba(0,0,0,.55); }
+        .modal-box h2 { font-size: 14.5px; font-weight: 600; color: var(--txt); }
+        .modal-box p  { font-size: 13px; color: var(--txt2); margin-top: 8px; line-height: 1.6; }
+        .modal-box strong { color: var(--txt); font-weight: 500; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 7px; margin-top: 20px; }
+
+        .btn { height: 33px; padding: 0 14px; border-radius: 7px; border: none; font: 13px var(--font); font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: opacity .13s, background .13s; }
+        .btn-ghost { background: var(--bg3); border: 1px solid var(--border2); color: var(--txt2); }
+        .btn-ghost:hover { color: var(--txt); }
+        .btn-del   { background: var(--red); color: #fff; }
+        .btn-del:hover { opacity: .86; }
+        .btn-del:disabled { opacity: .45; cursor: not-allowed; }
+
+        /* ── Toasts ──────────────────────────────────────────────────── */
+        #toastContainer { position: fixed; bottom: 18px; right: 18px; z-index: 99; display: flex; flex-direction: column; gap: 7px; width: 290px; }
+        .toast { display: flex; align-items: flex-start; gap: 9px; padding: 11px 13px; border-radius: 8px; border: 1px solid var(--border2); background: var(--bg2); font-size: 13px; color: var(--txt); box-shadow: 0 4px 20px rgba(0,0,0,.5); }
+        .toast.ok  { border-color: rgba(62,207,142,.22); }
+        .toast.err { border-color: rgba(240,71,71,.22); }
+        .t-icon { flex-shrink: 0; margin-top: 1px; }
+        .t-icon.c-ok  { color: var(--green); }
+        .t-icon.c-err { color: var(--red); }
+
+        /* ── Animations ──────────────────────────────────────────────── */
+        @@keyframes slideUp  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @@keyframes slideOut { to   { opacity: 0; transform: translateY(4px); } }
+        @@keyframes spin     { to   { transform: rotate(360deg); } }
+        .row-enter { animation: slideUp  .2s ease-out; }
+        .row-leave { animation: slideOut .15s ease-in forwards; }
+        .spinner   { animation: spin .65s linear infinite; }
+
+        @@media (prefers-reduced-motion: reduce) { .row-enter, .row-leave, .spinner { animation: none; } }
+
+        /* ── Responsive ──────────────────────────────────────────────── */
+        @@media (max-width: 720px) {
+            .sidebar { display: none; }
+            .content { margin-left: 0; }
+            .topbar  { padding: 0 16px; }
+            .main    { padding: 16px; }
+            .search-input { width: 180px; }
+        }
     </style>
 </head>
-<body class="min-h-screen bg-[#FAFAF9] text-[#18181B] antialiased">
+<body>
+<div class="shell">
 
-    <div id="app"
-         data-api-url="/api/employees"
-         data-delete-url-base="/api/employees"
-         data-initial-page="@Model.CurrentPage"
-         data-initial-page-size="@Model.PageSize"
-         data-initial-search-term="@Model.SearchTerm"
-         data-initial-total-records="@Model.TotalRecords">
+    <!-- ===== SIDEBAR ===== -->
+    <aside class="sidebar">
+        <div class="brand">
+            <div class="brand-mark">WB</div>
+            <div>
+                <div class="brand-name">WorkBase</div>
+                <div class="brand-sub">People & Org</div>
+            </div>
+        </div>
+        <nav class="nav">
+            <div class="nav-label">Directory</div>
+            <a class="nav-item active" href="#">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8Zm14 2-3 3m0 0-3-3m3 3V12"/>
+                </svg>
+                All Employees
+            </a>
+            <div class="nav-label">Departments</div>
+            <a class="nav-item" href="#" onclick="return false">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/>
+                </svg>
+                Engineering
+            </a>
+            <a class="nav-item" href="#" onclick="return false">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V6m0 14v-2"/>
+                </svg>
+                Finance
+            </a>
+            <a class="nav-item" href="#" onclick="return false">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M11 5H6a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2v-5m-1.414-9.414a2 2 1 1 1 2.828 2.828L11.828 15H9v-2.828l8.586-8.586Z"/>
+                </svg>
+                Marketing
+            </a>
+        </nav>
+        <div class="sidebar-foot">
+            <p>Internal use only.<br/>All data is confidential.</p>
+        </div>
+    </aside>
 
-        <!-- ============ HEADER ============ -->
-        <header class="sticky top-0 z-20 border-b border-zinc-200 bg-[#FAFAF9]/90 backdrop-blur-sm">
-            <div class="max-w-5xl mx-auto px-6 py-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <div class="flex items-center gap-3">
-                    <div class="h-9 w-9 rounded-lg bg-blue-600 flex items-center justify-center text-white font-semibold text-sm shrink-0">
-                        ED
-                    </div>
-                    <div>
-                        <h1 class="text-base font-semibold tracking-tight leading-none">Employee Directory</h1>
-                        <p id="recordSummary" class="text-xs text-zinc-500 mt-1">
-                            @Model.TotalRecords employee@(Model.TotalRecords == 1 ? "" : "s")
-                        </p>
-                    </div>
+    <!-- ===== CONTENT ===== -->
+    <div class="content">
+
+        <!-- Topbar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <span class="topbar-title">All Employees</span>
+            </div>
+            <div class="topbar-right">
+                <div class="chip">
+                    <span class="chip-dot"></span>
+                    <span id="recordSummary">@Model.TotalRecords employee@(Model.TotalRecords == 1 ? "" : "s")</span>
                 </div>
-
-                <div class="relative w-full sm:w-72">
-                    <svg class="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                        <circle cx="11" cy="11" r="7" />
-                        <path stroke-linecap="round" d="m20 20-3.5-3.5" />
+                <div class="search-wrap">
+                    <svg class="s-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2">
+                        <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="m20 20-3.5-3.5"/>
                     </svg>
-                    <input
-                        id="searchInput"
-                        type="search"
-                        autocomplete="off"
-                        placeholder="Search by first or last name…"
-                        value="@Model.SearchTerm"
-                        aria-label="Search employees by name"
-                        class="w-full pl-9 pr-8 py-2 text-sm rounded-lg border border-zinc-300 bg-white placeholder:text-zinc-400
-                               focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition" />
-                    <button
-                        id="clearSearchBtn"
-                        type="button"
-                        aria-label="Clear search"
-                        class="hidden absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <path stroke-linecap="round" d="M6 6l12 12M18 6 6 18" />
+                    <input id="searchInput" type="search" autocomplete="off"
+                           class="search-input" placeholder="Search employees…"
+                           value="@Model.SearchTerm" aria-label="Search employees by name" />
+                    <button id="clearSearchBtn" type="button" class="search-clear hidden" aria-label="Clear search">
+                        <svg width="11" height="11" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2">
+                            <path d="M1 1l10 10M11 1 1 11"/>
                         </svg>
                     </button>
                 </div>
             </div>
         </header>
 
-        <!-- ============ MAIN ============ -->
-        <main class="max-w-5xl mx-auto px-6 py-8">
+        <!-- Main -->
+        <main class="main"
+              id="app"
+              data-api-url="/api/employees"
+              data-delete-url-base="/api/employees"
+              data-initial-page="@Model.CurrentPage"
+              data-initial-page-size="@Model.PageSize"
+              data-initial-search-term="@Model.SearchTerm"
+              data-initial-total-records="@Model.TotalRecords">
 
-            <div class="bg-white border border-zinc-200 rounded-xl shadow-sm overflow-hidden">
-                <div id="tableWrapper" class="table-scroll overflow-x-auto transition-opacity duration-150">
-                    <table class="w-full text-sm border-collapse min-w-[720px]">
+            <div class="card">
+                <!-- Table -->
+                <div id="tableWrapper" class="tbl-wrap">
+                    <table>
                         <thead>
-                            <tr class="bg-zinc-50 border-b border-zinc-200 text-zinc-500 text-[11px] uppercase tracking-wider">
-                                <th class="text-left font-medium px-5 py-3">Name</th>
-                                <th class="text-left font-medium px-5 py-3">Department</th>
-                                <th class="text-left font-medium px-5 py-3">Job title</th>
-                                <th class="text-left font-medium px-5 py-3">Email</th>
-                                <th class="text-left font-medium px-5 py-3">Hire date</th>
-                                <th class="text-right font-medium px-5 py-3">Salary</th>
-                                <th class="px-5 py-3 w-12"><span class="sr-only">Actions</span></th>
+                            <tr>
+                                <th>Name</th>
+                                <th>Department</th>
+                                <th>Job Title</th>
+                                <th>Email</th>
+                                <th>Hire Date</th>
+                                <th class="r">Salary</th>
+                                <th style="width:44px"></th>
                             </tr>
                         </thead>
-                        <tbody id="employeeTableBody" class="divide-y divide-zinc-100">
+                        <tbody id="employeeTableBody">
                             @foreach (var emp in Model.Employees)
                             {
-                                <tr data-id="@emp.Id" class="hover:bg-zinc-50/70 transition-colors">
-                                    <td class="px-5 py-3">
-                                        <div class="flex items-center gap-3">
-                                            <div class="employee-avatar h-8 w-8 rounded-full flex items-center justify-center text-[11px] font-semibold text-white shrink-0"
-                                                 data-name="@emp.FirstName @emp.LastName">
+                                <tr data-id="@emp.Id">
+                                    <td class="name-cell">
+                                        <div class="name-wrap">
+                                            <div class="av employee-avatar" data-name="@emp.FirstName @emp.LastName">
                                                 @($"{emp.FirstName[0]}{emp.LastName[0]}".ToUpper())
                                             </div>
-                                            <span class="font-medium text-zinc-800">@emp.FirstName @emp.LastName</span>
+                                            @emp.FirstName @emp.LastName
                                         </div>
                                     </td>
-                                    <td class="px-5 py-3">
-                                        <span class="dept-badge inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium" data-dept="@emp.Department">
-                                            @emp.Department
-                                        </span>
-                                    </td>
-                                    <td class="px-5 py-3 text-zinc-600">@emp.JobTitle</td>
-                                    <td class="px-5 py-3 text-zinc-500 truncate max-w-[180px]">@emp.Email</td>
-                                    <td class="px-5 py-3 text-zinc-500 font-mono-num text-xs">@emp.HireDate.ToString("MMM d, yyyy")</td>
-                                    <td class="px-5 py-3 text-right font-mono-num text-zinc-700">@emp.Salary.ToString("C0")</td>
-                                    <td class="px-5 py-3 text-right">
-                                        <button
-                                            type="button"
-                                            class="delete-btn inline-flex items-center justify-center h-8 w-8 rounded-lg text-zinc-400
-                                                   hover:text-red-600 hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500/30 transition"
-                                            data-id="@emp.Id"
-                                            data-name="@emp.FirstName @emp.LastName"
-                                            aria-label="Delete @emp.FirstName @emp.LastName">
-                                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7h14Z" />
+                                    <td><span class="dept-badge" data-dept="@emp.Department">@emp.Department</span></td>
+                                    <td>@emp.JobTitle</td>
+                                    <td class="mono" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@emp.Email</td>
+                                    <td class="mono">@emp.HireDate.ToString("MMM d, yyyy")</td>
+                                    <td class="mono r">@emp.Salary.ToString("C0")</td>
+                                    <td class="r">
+                                        <button type="button" class="del-btn delete-btn"
+                                                data-id="@emp.Id" data-name="@emp.FirstName @emp.LastName"
+                                                aria-label="Delete @emp.FirstName @emp.LastName">
+                                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7h14Z"/>
                                             </svg>
                                         </button>
                                     </td>
@@ -145,72 +319,61 @@
                     </table>
                 </div>
 
-                <!-- Empty state (no results for current search) -->
-                <div id="emptyState" class="hidden flex flex-col items-center justify-center py-16 px-6 text-center">
-                    <div class="h-11 w-11 rounded-full bg-zinc-100 flex items-center justify-center mb-3">
-                        <svg class="h-5 w-5 text-zinc-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="7" /><path stroke-linecap="round" d="m20 20-3.5-3.5" />
+                <!-- Empty state -->
+                <div id="emptyState" class="hidden empty">
+                    <div class="empty-icon">
+                        <svg width="17" height="17" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="7"/><path stroke-linecap="round" d="m20 20-3.5-3.5"/>
                         </svg>
                     </div>
-                    <p class="text-sm font-medium text-zinc-700">No employees found</p>
-                    <p id="emptyStateHint" class="text-sm text-zinc-500 mt-1">Try a different search term.</p>
+                    <p>No employees found</p>
+                    <span id="emptyStateHint">Try a different search term.</span>
                 </div>
-            </div>
 
-            <!-- ============ PAGINATION ============ -->
-            <div id="paginationBar" class="flex items-center justify-between mt-5">
-                <p id="pageInfo" class="text-sm text-zinc-500"></p>
-                <div class="flex items-center gap-2">
-                    <button id="prevPageBtn" type="button"
-                        class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-zinc-300 bg-white text-zinc-700
-                               hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white
-                               focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition">
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6" /></svg>
-                        Previous
-                    </button>
-                    <span id="pageIndicator" class="text-sm text-zinc-600 font-medium px-2 tabular-nums"></span>
-                    <button id="nextPageBtn" type="button"
-                        class="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium rounded-lg border border-zinc-300 bg-white text-zinc-700
-                               hover:bg-zinc-50 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-white
-                               focus:outline-none focus:ring-2 focus:ring-blue-500/30 transition">
-                        Next
-                        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6" /></svg>
-                    </button>
+                <!-- Pagination -->
+                <div id="paginationBar" class="pg-bar">
+                    <p id="pageInfo" class="pg-info"></p>
+                    <div class="pg-ctrls">
+                        <button id="prevPageBtn" type="button" class="pg-btn">
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m15 18-6-6 6-6"/></svg>
+                            Prev
+                        </button>
+                        <span id="pageIndicator" class="pg-num"></span>
+                        <button id="nextPageBtn" type="button" class="pg-btn">
+                            Next
+                            <svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="m9 18 6-6-6-6"/></svg>
+                        </button>
+                    </div>
                 </div>
             </div>
         </main>
+    </div><!-- /.content -->
+</div><!-- /.shell -->
 
-        <!-- ============ DELETE CONFIRMATION MODAL ============ -->
-        <div id="confirmModal" class="hidden fixed inset-0 z-50 flex items-center justify-center px-4" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
-            <div id="confirmModalBackdrop" class="absolute inset-0 bg-zinc-900/40"></div>
-            <div class="relative bg-white rounded-xl shadow-lg max-w-sm w-full p-6">
-                <h2 id="confirmModalTitle" class="text-base font-semibold text-zinc-900">Delete employee?</h2>
-                <p id="confirmModalBody" class="text-sm text-zinc-500 mt-2">
-                    This will remove <span id="confirmModalName" class="font-medium text-zinc-700"></span> from the directory. This action cannot be undone.
-                </p>
-                <div class="flex justify-end gap-2 mt-6">
-                    <button id="cancelDeleteBtn" type="button"
-                        class="px-3.5 py-2 text-sm font-medium rounded-lg border border-zinc-300 text-zinc-700 hover:bg-zinc-50
-                               focus:outline-none focus:ring-2 focus:ring-zinc-300 transition">
-                        Cancel
-                    </button>
-                    <button id="confirmDeleteBtn" type="button"
-                        class="inline-flex items-center gap-2 px-3.5 py-2 text-sm font-medium rounded-lg bg-red-600 text-white hover:bg-red-700
-                               focus:outline-none focus:ring-2 focus:ring-red-500/40 disabled:opacity-60 disabled:cursor-not-allowed transition">
-                        <svg id="confirmDeleteSpinner" class="hidden spinner h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
-                            <circle cx="12" cy="12" r="9" stroke-opacity="0.25" />
-                            <path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round" />
-                        </svg>
-                        <span id="confirmDeleteLabel">Delete</span>
-                    </button>
-                </div>
-            </div>
+<!-- ===== DELETE MODAL ===== -->
+<div id="confirmModal" class="modal-wrap hidden" role="dialog" aria-modal="true" aria-labelledby="confirmModalTitle">
+    <div id="confirmModalBackdrop" class="modal-bg"></div>
+    <div class="modal-box">
+        <h2 id="confirmModalTitle">Remove employee?</h2>
+        <p id="confirmModalBody">
+            You're about to remove <strong id="confirmModalName"></strong> from the directory.
+            This action is permanent and cannot be undone.
+        </p>
+        <div class="modal-actions">
+            <button id="cancelDeleteBtn" type="button" class="btn btn-ghost">Cancel</button>
+            <button id="confirmDeleteBtn" type="button" class="btn btn-del">
+                <svg id="confirmDeleteSpinner" class="hidden spinner" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                    <circle cx="12" cy="12" r="9" stroke-opacity=".2"/><path d="M21 12a9 9 0 0 0-9-9" stroke-linecap="round"/>
+                </svg>
+                <span id="confirmDeleteLabel">Remove</span>
+            </button>
         </div>
-
-        <!-- ============ TOASTS ============ -->
-        <div id="toastContainer" class="fixed bottom-4 right-4 z-50 flex flex-col gap-2 w-[calc(100%-2rem)] max-w-sm"></div>
     </div>
+</div>
 
-    <script src="~/js/employees.js"></script>
+<!-- ===== TOASTS ===== -->
+<div id="toastContainer"></div>
+
+<script src="~/js/employees.js"></script>
 </body>
 </html>
