@@ -5,6 +5,8 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <RootNamespace>EmployeeDirectory</RootNamespace>
+    <!-- Exclude the test project subfolder from this project's compilation. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);EmployeeDirectory.Tests\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>
