@@ -1,19 +1,18 @@
 /**
  * Employee Directory — frontend logic.
- * No frameworks: plain fetch(), plain DOM APIs.
+ * Vanilla JS only — no frameworks, no libraries.
  *
- * Responsibilities:
- *  - Debounced search (300ms) against GET /api/employees, resets to page 1
- *  - Server-side pagination controls (Previous / Next)
- *  - Delete via DELETE /api/employees/{id} with a confirm dialog, a loading
- *    spinner on the confirm button, and toast-based error handling that
- *    never crashes the page.
+ *  - Debounced search (300ms), resets to page 1
+ *  - Server-side pagination (Previous / Next)
+ *  - Delete via DELETE /api/employees/{id} — confirm dialog, loading state,
+ *    optimistic DOM removal, toast-based error handling
+ *  - "/" focuses search (skipped when typing in a field already)
  */
 (function () {
     "use strict";
 
     // ---------------------------------------------------------------
-    // Setup / config (read from data-* attributes set by the server)
+    // Config + state
     // ---------------------------------------------------------------
 
     var app = document.getElementById("app");
@@ -31,23 +30,18 @@
         isLoading: false
     };
 
-    // Deterministic color palettes — same dept/person always gets same color.
-    // ponytail: inline CSS vars instead of Tailwind class combos
-    var DEPT_COLORS = [
-        { bg: "rgba(99,102,241,.15)",  color: "#a5b4fc" },
-        { bg: "rgba(16,185,129,.13)",  color: "#6ee7b7" },
-        { bg: "rgba(245,158,11,.13)",  color: "#fcd34d" },
-        { bg: "rgba(139,92,246,.14)",  color: "#c4b5fd" },
-        { bg: "rgba(239,68,68,.13)",   color: "#fca5a5" },
-        { bg: "rgba(6,182,212,.13)",   color: "#67e8f9" },
-        { bg: "rgba(249,115,22,.13)",  color: "#fdba74" },
-        { bg: "rgba(20,184,166,.13)",  color: "#5eead4" },
-        { bg: "rgba(236,72,153,.13)",  color: "#f9a8d4" },
-        { bg: "rgba(132,204,22,.13)",  color: "#bef264" }
-    ];
-    var AVATAR_PALETTE = [
-        "#5c54d4", "#0d7a6a", "#b45309", "#6d28d9",
-        "#b91c1c", "#0369a1", "#c2410c", "#047857"
+    // A small, curated set of muted tones — not the default rainbow of
+    // saturated utility-class colors. Departments and avatars share this
+    // palette so the page reads as one deliberate system, not a grab-bag.
+    var PALETTE = [
+        "#1F4D3D", // forest
+        "#8A5A2E", // terracotta
+        "#2E5C82", // steel blue
+        "#6B4A8A", // plum
+        "#8A3B3B", // brick
+        "#4A7A6B", // sage
+        "#7A5C1E", // bronze
+        "#5C5C8A"  // slate indigo
     ];
 
     // ---------------------------------------------------------------
@@ -60,6 +54,7 @@
     var emptyStateHint = document.getElementById("emptyStateHint");
     var recordSummary = document.getElementById("recordSummary");
 
+    var searchField = document.getElementById("searchField");
     var searchInput = document.getElementById("searchInput");
     var clearSearchBtn = document.getElementById("clearSearchBtn");
 
@@ -69,7 +64,6 @@
     var nextPageBtn = document.getElementById("nextPageBtn");
 
     var confirmModal = document.getElementById("confirmModal");
-    var confirmModalBackdrop = document.getElementById("confirmModalBackdrop");
     var confirmModalName = document.getElementById("confirmModalName");
     var cancelDeleteBtn = document.getElementById("cancelDeleteBtn");
     var confirmDeleteBtn = document.getElementById("confirmDeleteBtn");
@@ -79,7 +73,7 @@
     var toastContainer = document.getElementById("toastContainer");
 
     var pendingDeleteId = null;
-    var pendingDeleteName = null;
+    var lastFocusedBeforeModal = null;
 
     // ---------------------------------------------------------------
     // Utilities
@@ -90,9 +84,7 @@
         return function () {
             var args = arguments;
             clearTimeout(timerId);
-            timerId = setTimeout(function () {
-                fn.apply(null, args);
-            }, delayMs);
+            timerId = setTimeout(function () { fn.apply(null, args); }, delayMs);
         };
     }
 
@@ -105,6 +97,10 @@
         return Math.abs(hash);
     }
 
+    function toneFor(seed) {
+        return PALETTE[hashString(seed) % PALETTE.length];
+    }
+
     function escapeHtml(value) {
         var div = document.createElement("div");
         div.textContent = value == null ? "" : String(value);
@@ -113,38 +109,30 @@
 
     function formatCurrency(amount) {
         return new Intl.NumberFormat("en-US", {
-            style: "currency",
-            currency: "USD",
-            maximumFractionDigits: 0
+            style: "currency", currency: "USD", maximumFractionDigits: 0
         }).format(amount);
     }
 
     function formatDate(isoString) {
-        var date = new Date(isoString);
-        return date.toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" });
+        return new Date(isoString).toLocaleDateString("en-US", {
+            year: "numeric", month: "short", day: "numeric"
+        });
     }
 
     function initials(firstName, lastName) {
-        var a = (firstName || "").charAt(0);
-        var b = (lastName || "").charAt(0);
-        return (a + b).toUpperCase();
+        return ((firstName || "").charAt(0) + (lastName || "").charAt(0)).toUpperCase();
     }
 
     // ---------------------------------------------------------------
     // Rendering
     // ---------------------------------------------------------------
 
-    function renderDeptBadges() {
-        tableBody.querySelectorAll(".dept-badge").forEach(function (el) {
-            var c = DEPT_COLORS[hashString(el.dataset.dept || "") % DEPT_COLORS.length];
-            el.style.background = c.bg;
-            el.style.color = c.color;
+    function colorizeExistingRows() {
+        tableBody.querySelectorAll(".avatar").forEach(function (el) {
+            el.style.backgroundColor = toneFor(el.dataset.name || "");
         });
-    }
-
-    function renderAvatars() {
-        tableBody.querySelectorAll(".employee-avatar").forEach(function (el) {
-            el.style.background = AVATAR_PALETTE[hashString(el.dataset.name || "") % AVATAR_PALETTE.length];
+        tableBody.querySelectorAll(".dept__dot").forEach(function (el) {
+            el.style.backgroundColor = toneFor(el.dataset.dept || "");
         });
     }
 
@@ -154,25 +142,25 @@
         tr.className = "row-enter";
 
         var fullName = employee.firstName + " " + employee.lastName;
+        var avatarColor = toneFor(fullName);
+        var deptColor = toneFor(employee.department);
 
         tr.innerHTML =
-            '<td class="name-cell">' +
-                '<div class="name-wrap">' +
-                    '<div class="av employee-avatar" data-name="' + escapeHtml(fullName) + '">' +
-                        initials(employee.firstName, employee.lastName) +
-                    '</div>' +
-                    escapeHtml(fullName) +
+            '<td>' +
+                '<div class="person">' +
+                    '<div class="avatar" style="background-color:' + avatarColor + '">' + initials(employee.firstName, employee.lastName) + '</div>' +
+                    '<span class="person__name">' + escapeHtml(fullName) + '</span>' +
                 '</div>' +
             '</td>' +
-            '<td><span class="dept-badge" data-dept="' + escapeHtml(employee.department) + '">' + escapeHtml(employee.department) + '</span></td>' +
-            '<td>' + escapeHtml(employee.jobTitle) + '</td>' +
-            '<td class="mono" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + escapeHtml(employee.email || "") + '</td>' +
-            '<td class="mono">' + formatDate(employee.hireDate) + '</td>' +
-            '<td class="mono r">' + formatCurrency(employee.salary) + '</td>' +
-            '<td class="r">' +
-                '<button type="button" class="del-btn delete-btn" data-id="' + employee.id + '" data-name="' + escapeHtml(fullName) + '" aria-label="Delete ' + escapeHtml(fullName) + '">' +
-                    '<svg fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">' +
-                        '<path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7h14Z"/>' +
+            '<td><span class="dept"><span class="dept__dot" style="background-color:' + deptColor + '"></span>' + escapeHtml(employee.department) + '</span></td>' +
+            '<td class="cell-muted">' + escapeHtml(employee.jobTitle) + '</td>' +
+            '<td class="cell-email">' + escapeHtml(employee.email || "") + '</td>' +
+            '<td class="num">' + formatDate(employee.hireDate) + '</td>' +
+            '<td class="num">' + formatCurrency(employee.salary) + '</td>' +
+            '<td class="row-actions">' +
+                '<button type="button" class="icon-btn delete-btn" data-id="' + employee.id + '" data-name="' + escapeHtml(fullName) + '" aria-label="Delete ' + escapeHtml(fullName) + '">' +
+                    '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">' +
+                        '<path stroke-linecap="round" stroke-linejoin="round" d="M4 7h16M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2m2 0-1 13a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 7h14Z" />' +
                     '</svg>' +
                 '</button>' +
             '</td>';
@@ -180,29 +168,38 @@
         return tr;
     }
 
+    function renderSkeleton(rows) {
+        tableBody.innerHTML = "";
+        emptyState.classList.remove("is-visible");
+        var widths = [140, 90, 120, 150, 80, 60];
+        for (var i = 0; i < rows; i++) {
+            var tr = document.createElement("tr");
+            var cells = "";
+            widths.forEach(function (w) {
+                cells += '<td><div class="skeleton-bar" style="width:' + w + 'px"></div></td>';
+            });
+            cells += '<td></td>';
+            tr.innerHTML = cells;
+            tableBody.appendChild(tr);
+        }
+    }
+
     function renderTable(employees) {
         tableBody.innerHTML = "";
 
         if (!employees || employees.length === 0) {
-            tableWrapper.classList.add("hidden");
-            emptyState.classList.remove("hidden");
+            emptyState.classList.add("is-visible");
             emptyStateHint.textContent = state.searchTerm
                 ? 'No results for "' + state.searchTerm + '". Try a different name.'
                 : "There are no employees to display.";
             return;
         }
 
-        tableWrapper.classList.remove("hidden");
-        emptyState.classList.add("hidden");
+        emptyState.classList.remove("is-visible");
 
         var fragment = document.createDocumentFragment();
-        employees.forEach(function (employee) {
-            fragment.appendChild(buildRow(employee));
-        });
+        employees.forEach(function (employee) { fragment.appendChild(buildRow(employee)); });
         tableBody.appendChild(fragment);
-
-        renderDeptBadges();
-        renderAvatars();
     }
 
     function renderPaginationAndSummary(data) {
@@ -212,8 +209,8 @@
 
         var totalPages = data.totalPages;
 
-        recordSummary.textContent = data.totalRecords + " employee" + (data.totalRecords === 1 ? "" : "s") +
-            (state.searchTerm ? ' matching "' + state.searchTerm + '"' : "");
+        recordSummary.innerHTML = '<strong>' + data.totalRecords + '</strong> employee' + (data.totalRecords === 1 ? "" : "s") +
+            (state.searchTerm ? ' matching "' + escapeHtml(state.searchTerm) + '"' : " on record");
 
         if (data.totalRecords === 0) {
             pageInfo.textContent = "";
@@ -222,7 +219,7 @@
             var startRecord = (data.currentPage - 1) * data.pageSize + 1;
             var endRecord = Math.min(data.currentPage * data.pageSize, data.totalRecords);
             pageInfo.textContent = "Showing " + startRecord + "–" + endRecord + " of " + data.totalRecords;
-            pageIndicator.textContent = "Page " + data.currentPage + " of " + totalPages;
+            pageIndicator.textContent = data.currentPage + " / " + totalPages;
         }
 
         prevPageBtn.disabled = !data.hasPreviousPage;
@@ -231,8 +228,9 @@
 
     function setLoading(isLoading) {
         state.isLoading = isLoading;
-        tableWrapper.style.opacity = isLoading ? "0.4" : "";
-        tableWrapper.style.pointerEvents = isLoading ? "none" : "";
+        if (isLoading) {
+            renderSkeleton(Math.min(state.pageSize, 8));
+        }
         prevPageBtn.disabled = isLoading || prevPageBtn.disabled;
         nextPageBtn.disabled = isLoading || nextPageBtn.disabled;
     }
@@ -244,18 +242,18 @@
     function showToast(message, type) {
         var isError = type === "error";
         var toast = document.createElement("div");
-        toast.className = "toast row-enter " + (isError ? "err" : "ok");
+        toast.className = "toast" + (isError ? " toast--error" : "");
 
-        var iconSvg = isError
-            ? '<svg class="t-icon c-err" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 8v5m0 3h.01"/></svg>'
-            : '<svg class="t-icon c-ok" width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="m8 12 3 3 5-6"/></svg>';
+        var icon = isError
+            ? '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 8v5m0 3h.01"/></svg>'
+            : '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" stroke-linejoin="round" d="m8 12 3 3 5-6"/></svg>';
 
-        toast.innerHTML = iconSvg + '<span>' + escapeHtml(message) + '</span>';
+        toast.innerHTML = icon + '<span>' + escapeHtml(message) + '</span>';
         toastContainer.appendChild(toast);
 
         setTimeout(function () {
-            toast.classList.add("row-leave");
-            setTimeout(function () { toast.remove(); }, 160);
+            toast.classList.add("is-leaving");
+            setTimeout(function () { toast.remove(); }, 180);
         }, 4000);
     }
 
@@ -265,28 +263,19 @@
 
     function loadEmployees() {
         if (state.isLoading) return Promise.resolve();
-
         setLoading(true);
 
-        var params = new URLSearchParams({
-            page: state.currentPage,
-            pageSize: state.pageSize
-        });
-        if (state.searchTerm) {
-            params.set("searchTerm", state.searchTerm);
-        }
+        var params = new URLSearchParams({ page: state.currentPage, pageSize: state.pageSize });
+        if (state.searchTerm) params.set("searchTerm", state.searchTerm);
 
         return fetch(config.apiUrl + "?" + params.toString(), {
             method: "GET",
             headers: { Accept: "application/json" }
         })
             .then(function (response) {
-                return response.json().catch(function () {
-                    return null;
-                }).then(function (payload) {
+                return response.json().catch(function () { return null; }).then(function (payload) {
                     if (!response.ok || !payload || payload.success === false) {
-                        var message = (payload && payload.message) || "Failed to load employees (" + response.status + ").";
-                        throw new Error(message);
+                        throw new Error((payload && payload.message) || "Failed to load employees (" + response.status + ").");
                     }
                     return payload.data;
                 });
@@ -299,12 +288,12 @@
                 showToast(err.message || "Network error — could not load employees.", "error");
             })
             .finally(function () {
-                setLoading(false);
+                state.isLoading = false;
             });
     }
 
     // ---------------------------------------------------------------
-    // Search (debounced, resets to page 1)
+    // Search
     // ---------------------------------------------------------------
 
     var debouncedSearch = debounce(function (value) {
@@ -315,32 +304,36 @@
 
     searchInput.addEventListener("input", function (e) {
         var value = e.target.value;
-        clearSearchBtn.classList.toggle("hidden", value.length === 0);
+        searchField.classList.toggle("has-value", value.length > 0);
         debouncedSearch(value);
     });
 
     clearSearchBtn.addEventListener("click", function () {
         searchInput.value = "";
-        clearSearchBtn.classList.add("hidden");
+        searchField.classList.remove("has-value");
         state.searchTerm = "";
         state.currentPage = 1;
         loadEmployees();
         searchInput.focus();
     });
 
-    if (searchInput.value) {
-        clearSearchBtn.classList.remove("hidden");
-    }
+    if (searchInput.value) searchField.classList.add("has-value");
+
+    // "/" focuses search, unless already typing in an input/textarea.
+    document.addEventListener("keydown", function (e) {
+        if (e.key === "/" && document.activeElement !== searchInput &&
+            !/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName)) {
+            e.preventDefault();
+            searchInput.focus();
+        }
+    });
 
     // ---------------------------------------------------------------
     // Pagination
     // ---------------------------------------------------------------
 
     prevPageBtn.addEventListener("click", function () {
-        if (state.currentPage > 1) {
-            state.currentPage -= 1;
-            loadEmployees();
-        }
+        if (state.currentPage > 1) { state.currentPage -= 1; loadEmployees(); }
     });
 
     nextPageBtn.addEventListener("click", function () {
@@ -349,31 +342,32 @@
     });
 
     // ---------------------------------------------------------------
-    // Delete flow: confirm modal -> Fetch API DELETE -> DOM update
+    // Delete flow
     // ---------------------------------------------------------------
 
     function openConfirmModal(id, name) {
         pendingDeleteId = id;
-        pendingDeleteName = name;
+        lastFocusedBeforeModal = document.activeElement;
         confirmModalName.textContent = name;
-        confirmModal.classList.remove("hidden");
+        confirmModal.classList.add("is-open");
         cancelDeleteBtn.focus();
     }
 
     function closeConfirmModal() {
-        confirmModal.classList.add("hidden");
+        confirmModal.classList.remove("is-open");
         pendingDeleteId = null;
-        pendingDeleteName = null;
+        if (lastFocusedBeforeModal && document.contains(lastFocusedBeforeModal)) {
+            lastFocusedBeforeModal.focus();
+        }
     }
 
     function setDeleteButtonLoading(isLoading) {
         confirmDeleteBtn.disabled = isLoading;
         cancelDeleteBtn.disabled = isLoading;
-        confirmDeleteSpinner.classList.toggle("hidden", !isLoading);
+        confirmDeleteSpinner.style.display = isLoading ? "inline-block" : "none";
         confirmDeleteLabel.textContent = isLoading ? "Deleting…" : "Delete";
     }
 
-    // Event delegation: rows are re-rendered dynamically, so listen on the tbody.
     tableBody.addEventListener("click", function (e) {
         var btn = e.target.closest(".delete-btn");
         if (!btn) return;
@@ -381,17 +375,19 @@
     });
 
     cancelDeleteBtn.addEventListener("click", closeConfirmModal);
-    confirmModalBackdrop.addEventListener("click", closeConfirmModal);
+
+    confirmModal.addEventListener("click", function (e) {
+        if (e.target === confirmModal) closeConfirmModal();
+    });
 
     document.addEventListener("keydown", function (e) {
-        if (e.key === "Escape" && !confirmModal.classList.contains("hidden")) {
+        if (e.key === "Escape" && confirmModal.classList.contains("is-open")) {
             closeConfirmModal();
         }
     });
 
     confirmDeleteBtn.addEventListener("click", function () {
         if (!pendingDeleteId) return;
-
         var id = pendingDeleteId;
         setDeleteButtonLoading(true);
 
@@ -400,19 +396,14 @@
             headers: { Accept: "application/json" }
         })
             .then(function (response) {
-                return response.json().catch(function () {
-                    return null;
-                }).then(function (payload) {
+                return response.json().catch(function () { return null; }).then(function (payload) {
                     return { ok: response.ok, status: response.status, payload: payload };
                 });
             })
             .then(function (result) {
                 if (!result.ok) {
-                    var message = (result.payload && result.payload.message) ||
-                        "Could not delete employee (" + result.status + ").";
-                    throw new Error(message);
+                    throw new Error((result.payload && result.payload.message) || "Could not delete employee (" + result.status + ").");
                 }
-
                 removeRowAndReconcile(id);
                 showToast("Employee deleted successfully.", "success");
             })
@@ -425,20 +416,12 @@
             });
     });
 
-    /**
-     * Optimistically removes the row from the DOM (no page reload), updates
-     * the visible total count, and — if that was the last row on a page
-     * beyond page 1 — steps back a page and refetches so the user never
-     * lands on an empty page.
-     */
     function removeRowAndReconcile(id) {
         var row = tableBody.querySelector('tr[data-id="' + id + '"]');
         if (row) {
-            row.classList.add("row-leave");
-            setTimeout(function () {
-                row.remove();
-                afterRowRemoved();
-            }, 150);
+            row.style.transition = "opacity 0.15s ease";
+            row.style.opacity = "0";
+            setTimeout(function () { row.remove(); afterRowRemoved(); }, 150);
         } else {
             afterRowRemoved();
         }
@@ -454,9 +437,7 @@
             return;
         }
 
-        if (remainingRowsOnPage === 0) {
-            renderTable([]);
-        }
+        if (remainingRowsOnPage === 0) renderTable([]);
 
         var totalPages = state.pageSize === 0 ? 0 : Math.ceil(state.totalRecords / state.pageSize);
         renderPaginationAndSummary({
@@ -470,12 +451,11 @@
     }
 
     // ---------------------------------------------------------------
-    // Init — colorize the server-rendered rows on first paint.
-    // No initial fetch: the server already rendered page 1 in the HTML.
+    // Init — colorize server-rendered rows on first paint, no re-fetch
+    // (the server already rendered page 1).
     // ---------------------------------------------------------------
 
-    renderDeptBadges();
-    renderAvatars();
+    colorizeExistingRows();
     renderPaginationAndSummary({
         currentPage: state.currentPage,
         pageSize: state.pageSize,

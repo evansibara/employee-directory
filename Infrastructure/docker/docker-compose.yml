@@ -1,3 +1,9 @@
+# Without this, Compose defaults the project/group name to the folder
+# this file lives in — which is "docker" (Infrastructure/docker/), and
+# that's what shows up as the stack name in Docker Desktop. Setting it
+# explicitly here decouples the project name from the folder structure.
+name: employee-directory
+
 services:
   db:
     image: mcr.microsoft.com/mssql/server:2022-latest
